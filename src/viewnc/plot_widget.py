@@ -13,13 +13,14 @@ class PlotWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.figure = Figure(constrained_layout=True)
+        self.figure.get_layout_engine().set(w_pad=0.08, h_pad=0.08)
         self.canvas = FigureCanvasQTAgg(self.figure)
         self.toolbar = NavigationToolbar2QT(self.canvas, self)
         self._ax = None
         self._clickable = False
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(6, 6, 6, 6)
         layout.addWidget(self.toolbar)
         layout.addWidget(self.canvas)
 
@@ -32,9 +33,7 @@ class PlotWidget(QWidget):
             return
         self.pointClicked.emit(event.xdata, event.ydata)
 
-    def plot_line(
-        self, x, y, *, xlabel: str = "", ylabel: str = "", title: str = "", square: bool = True
-    ) -> None:
+    def plot_line(self, x, y, *, xlabel: str = "", ylabel: str = "", title: str = "") -> None:
         self.figure.clear()
         ax = self.figure.add_subplot(111)
         ax.plot(x, y)
@@ -42,8 +41,6 @@ class PlotWidget(QWidget):
         ax.set_ylabel(ylabel)
         ax.set_title(title)
         ax.grid(True, alpha=0.3)
-        if square:
-            ax.set_box_aspect(1)
         self._ax = ax
         self._clickable = False
         self.canvas.draw_idle()
@@ -65,7 +62,6 @@ class PlotWidget(QWidget):
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
         ax.set_title(title)
-        ax.set_box_aspect(1)
         self.figure.colorbar(mesh, ax=ax, shrink=0.75)
         self._ax = ax
         self._clickable = True

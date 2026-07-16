@@ -78,6 +78,6 @@ class PointDialog(QDialog):
 
         if sweep_dim in Y_AXIS_DIMS:
             # Vertical-profile convention: height on the y-axis, value on x.
-            self.plot_widget.plot_line(raw, x, xlabel=self.name, ylabel=sweep_dim, title=title, square=False)
+            self.plot_widget.plot_line(raw, x, xlabel=self.name, ylabel=sweep_dim, title=title)
         else:
-            self.plot_widget.plot_line(x, raw, xlabel=sweep_dim, ylabel=self.name, title=title, square=False)
+            self.plot_widget.plot_line(x, raw, xlabel=sweep_dim, ylabel=self.name, title=title)
