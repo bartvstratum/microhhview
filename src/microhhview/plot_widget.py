@@ -65,10 +65,12 @@ class PlotWidget(QWidget):
         ylabel: str = "",
         title: str = "",
         cmap: str | Colormap = "viridis",
+        vmin: float | None = None,
+        vmax: float | None = None,
     ) -> None:
         self.figure.clear()
         ax = self.figure.add_subplot(111)
-        mesh = ax.pcolormesh(x, y, data, cmap=cmap, shading="auto")
+        mesh = ax.pcolormesh(x, y, data, cmap=cmap, shading="auto", vmin=vmin, vmax=vmax)
         mesh.set_mouseover(False)  # avoid a duplicate auto "[value]" line from the mesh itself
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)

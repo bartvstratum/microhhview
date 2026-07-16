@@ -6,13 +6,18 @@ import colormaps as colormaps_pkg
 import matplotlib as mpl
 import numpy as np
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QDoubleValidator
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDockWidget,
     QFileDialog,
+    QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
+    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -25,6 +30,16 @@ from .plot_widget import PlotWidget, nearest_index
 from .point_dialog import PointDialog
 
 FILE_FILTER = "NetCDF/HDF5 files (*.nc *.nc4 *.cdf *.h5 *.hdf5);;All files (*)"
+
+
+def _section_header(text: str) -> QLabel:
+    label = QLabel(text.upper())
+    font = label.font()
+    font.setBold(True)
+    font.setPointSize(max(font.pointSize() - 1, 1))
+    label.setFont(font)
+    label.setContentsMargins(0, 12, 0, 2)
+    return label
 
 
 def _resolve_cmap(name: str):
@@ -81,20 +96,60 @@ class MainWindow(QMainWindow):
             self.cmap_combo.setCurrentText(default_cmap)
         self.cmap_combo.currentIndexChanged.connect(self._redraw)
 
-        self._axis_widgets = [self.y_label, self.y_combo, self.x_label, self.x_combo, self.cmap_label, self.cmap_combo]
+        self.autoscale_checkbox = QCheckBox("Auto scale (per frame)")
+        self.autoscale_checkbox.setChecked(True)
+        self.autoscale_checkbox.toggled.connect(self._on_scale_toggled)
+
+        self.vmin_edit = QLineEdit()
+        self.vmin_edit.setValidator(QDoubleValidator())
+        self.vmin_edit.setEnabled(False)
+        self.vmin_edit.editingFinished.connect(self._redraw)
+
+        self.vmax_edit = QLineEdit()
+        self.vmax_edit.setValidator(QDoubleValidator())
+        self.vmax_edit.setEnabled(False)
+        self.vmax_edit.editingFinished.connect(self._redraw)
+
+        vrange_container = QWidget()
+        vrange_layout = QHBoxLayout(vrange_container)
+        vrange_layout.setContentsMargins(0, 0, 0, 0)
+        vrange_layout.addWidget(QLabel("vmin:"))
+        vrange_layout.addWidget(self.vmin_edit)
+        vrange_layout.addWidget(QLabel("vmax:"))
+        vrange_layout.addWidget(self.vmax_edit)
+
+        self.global_range_button = QPushButton("Use global range")
+        self.global_range_button.clicked.connect(self._on_global_range_clicked)
+
+        axes_widgets = [self.x_label, self.x_combo, self.y_label, self.y_combo]
+        color_widgets = [
+            self.cmap_label,
+            self.cmap_combo,
+            self.autoscale_checkbox,
+            vrange_container,
+            self.global_range_button,
+        ]
+        self._axis_widgets = axes_widgets + color_widgets
 
         self.dim_panel = DimControlsPanel()
         self.dim_panel.changed.connect(self._redraw)
 
         sidebar = QWidget()
         sidebar_layout = QVBoxLayout(sidebar)
+        sidebar_layout.setSpacing(4)
+        sidebar_layout.addWidget(_section_header("Data"))
         sidebar_layout.addWidget(QLabel("Group:"))
         sidebar_layout.addWidget(self.group_combo)
         sidebar_layout.addWidget(QLabel("Variable:"))
         sidebar_layout.addWidget(self.var_combo)
-        for w in self._axis_widgets:
+        sidebar_layout.addWidget(_section_header("Axes"))
+        for w in axes_widgets:
             sidebar_layout.addWidget(w)
+        sidebar_layout.addWidget(_section_header("Dimensions"))
         sidebar_layout.addWidget(self.dim_panel)
+        sidebar_layout.addWidget(_section_header("Colors"))
+        for w in color_widgets:
+            sidebar_layout.addWidget(w)
         sidebar_layout.addStretch(1)
 
         dock = QDockWidget("Controls", self)
@@ -202,6 +257,32 @@ class MainWindow(QMainWindow):
         self._update_dim_panel()
         self._redraw()
 
+    def _on_scale_toggled(self, checked: bool) -> None:
+        self.vmin_edit.setEnabled(not checked)
+        self.vmax_edit.setEnabled(not checked)
+        if not checked and not self.vmin_edit.text() and not self.vmax_edit.text():
+            self._fill_global_range()
+        self._redraw()
+
+    def _on_global_range_clicked(self) -> None:
+        self._fill_global_range()
+        self.autoscale_checkbox.setChecked(False)
+        self._redraw()
+
+    def _fill_global_range(self) -> None:
+        if self.backend is None or self.current_group is None or self.current_var is None:
+            return
+        full = self.backend.read(self.current_group, self.current_var, {})
+        self.vmin_edit.setText(f"{np.nanmin(full):.4g}")
+        self.vmax_edit.setText(f"{np.nanmax(full):.4g}")
+
+    @staticmethod
+    def _parse_float(text: str) -> float | None:
+        try:
+            return float(text)
+        except ValueError:
+            return None
+
     def _update_dim_panel(self) -> None:
         """Rebuild the slice-dimension sliders for every dim that isn't
         currently plotted on the x/y axis, keeping any prior slider
@@ -250,8 +331,23 @@ class MainWindow(QMainWindow):
             yc = self.backend.coord(group, y_dim)
             x = xc if xc is not None else np.arange(data2d.shape[1])
             y = yc if yc is not None else np.arange(data2d.shape[0])
+
+            if self.autoscale_checkbox.isChecked():
+                vmin = vmax = None
+            else:
+                vmin = self._parse_float(self.vmin_edit.text())
+                vmax = self._parse_float(self.vmax_edit.text())
+
             self.plot_widget.plot_pcolormesh(
-                x, y, data2d, xlabel=x_dim, ylabel=y_dim, title=name, cmap=self.cmap_combo.currentData()
+                x,
+                y,
+                data2d,
+                xlabel=x_dim,
+                ylabel=y_dim,
+                title=name,
+                cmap=self.cmap_combo.currentData(),
+                vmin=vmin,
+                vmax=vmax,
             )
             self._current_2d = {
                 "x_dim": x_dim,
