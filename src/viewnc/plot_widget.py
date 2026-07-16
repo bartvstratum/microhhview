@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
+from matplotlib.colors import Colormap
 from matplotlib.figure import Figure
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QVBoxLayout, QWidget
@@ -56,7 +57,7 @@ class PlotWidget(QWidget):
         xlabel: str = "",
         ylabel: str = "",
         title: str = "",
-        cmap: str = "viridis",
+        cmap: str | Colormap = "viridis",
     ) -> None:
         self.figure.clear()
         ax = self.figure.add_subplot(111)

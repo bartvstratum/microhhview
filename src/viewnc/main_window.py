@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import colormaps as colormaps_pkg
 import matplotlib.dates as mdates
 import numpy as np
 from PySide6.QtCore import Qt
@@ -23,7 +24,8 @@ from .dim_controls import DimControlsPanel
 from .plot_widget import PlotWidget
 from .point_dialog import PointDialog
 
-CMAPS = ["viridis", "plasma", "inferno", "cividis", "coolwarm", "RdBu_r", "jet", "turbo", "gray"]
+MPL_CMAPS = ["viridis", "plasma", "inferno", "cividis", "coolwarm", "RdBu_r", "jet", "turbo", "gray"]
+DEFAULT_CMAP = "WhiteBlueGreenYellowRed"
 
 FILE_FILTER = "NetCDF/HDF5 files (*.nc *.nc4 *.cdf *.h5 *.hdf5);;All files (*)"
 
@@ -74,7 +76,10 @@ class MainWindow(QMainWindow):
 
         self.cmap_label = QLabel("Colormap:")
         self.cmap_combo = QComboBox()
-        self.cmap_combo.addItems(CMAPS)
+        for cmap_name in MPL_CMAPS:
+            self.cmap_combo.addItem(cmap_name, cmap_name)
+        self.cmap_combo.addItem(DEFAULT_CMAP, getattr(colormaps_pkg, DEFAULT_CMAP))
+        self.cmap_combo.setCurrentText(DEFAULT_CMAP)
         self.cmap_combo.currentIndexChanged.connect(self._redraw)
 
         self._axis_widgets = [self.y_label, self.y_combo, self.x_label, self.x_combo, self.cmap_label, self.cmap_combo]
@@ -226,7 +231,7 @@ class MainWindow(QMainWindow):
             x = xc if xc is not None else np.arange(data2d.shape[1])
             y = yc if yc is not None else np.arange(data2d.shape[0])
             self.plot_widget.plot_pcolormesh(
-                x, y, data2d, xlabel=x_dim, ylabel=y_dim, title=name, cmap=self.cmap_combo.currentText()
+                x, y, data2d, xlabel=x_dim, ylabel=y_dim, title=name, cmap=self.cmap_combo.currentData()
             )
             self._current_2d = {
                 "x_dim": x_dim,
