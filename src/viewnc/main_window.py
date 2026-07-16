@@ -56,8 +56,8 @@ class MainWindow(QMainWindow):
         self.y_combo = QComboBox()
         self.x_label = QLabel("X axis:")
         self.x_combo = QComboBox()
-        self.x_combo.currentIndexChanged.connect(self._redraw)
-        self.y_combo.currentIndexChanged.connect(self._redraw)
+        self.x_combo.currentIndexChanged.connect(self._on_axis_changed)
+        self.y_combo.currentIndexChanged.connect(self._on_axis_changed)
 
         self.cmap_label = QLabel("Colormap:")
         self.cmap_combo = QComboBox()
@@ -168,13 +168,6 @@ class MainWindow(QMainWindow):
         is_2d_plot = len(info.dims) >= 2
         self._set_2d_controls_visible(is_2d_plot)
 
-        if is_2d_plot:
-            plot_dims = list(info.dims[-2:])
-            slice_dims = list(info.dims[:-2])
-        else:
-            plot_dims = list(info.dims)
-            slice_dims = []
-
         self.x_combo.blockSignals(True)
         self.y_combo.blockSignals(True)
         self.x_combo.clear()
@@ -182,17 +175,38 @@ class MainWindow(QMainWindow):
         self.x_combo.addItems(info.dims)
         self.y_combo.addItems(info.dims)
         if is_2d_plot:
-            y_dim, x_dim = default_xy((plot_dims[0], plot_dims[1]))
+            y_dim, x_dim = default_xy((info.dims[-2], info.dims[-1]))
             self.y_combo.setCurrentText(y_dim)
             self.x_combo.setCurrentText(x_dim)
         self.x_combo.blockSignals(False)
         self.y_combo.blockSignals(False)
 
+        self._update_dim_panel()
+        self._redraw()
+
+    def _on_axis_changed(self, _index: int = 0) -> None:
+        self._update_dim_panel()
+        self._redraw()
+
+    def _update_dim_panel(self) -> None:
+        """Rebuild the slice-dimension sliders for every dim that isn't
+        currently plotted on the x/y axis, keeping any prior slider
+        positions that still apply."""
+        if self.backend is None or self.current_group is None or self.current_var is None:
+            return
+        info = self.backend.variables(self.current_group)[self.current_var]
+
+        x_dim = self.x_combo.currentText()
+        y_dim = self.y_combo.currentText()
+        if len(info.dims) >= 2 and x_dim and y_dim and x_dim != y_dim and x_dim in info.dims and y_dim in info.dims:
+            slice_dims = [d for d in info.dims if d not in (x_dim, y_dim)]
+        else:
+            slice_dims = list(info.dims[:-2])
+
+        previous = self.dim_panel.indexers()
         dims_sizes = [(d, s) for d, s in zip(info.dims, info.shape) if d in slice_dims]
         coords = {d: self.backend.coord(self.current_group, d) for d, _ in dims_sizes}
-        self.dim_panel.set_dims(dims_sizes, coords)
-
-        self._redraw()
+        self.dim_panel.set_dims(dims_sizes, coords, initial=previous)
 
     def _redraw(self) -> None:
         if self.backend is None or self.current_group is None or self.current_var is None:
