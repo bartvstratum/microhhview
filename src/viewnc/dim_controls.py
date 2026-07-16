@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QFormLayout, QHBoxLayout, QLabel, QSlider, QSpinBox, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QSlider, QSpinBox, QVBoxLayout, QWidget
 
 
 class DimSlider(QWidget):
@@ -22,7 +22,7 @@ class DimSlider(QWidget):
         self.spin.setRange(0, max_index)
         self.spin.setValue(initial)
         self.value_label = QLabel()
-        self.value_label.setMinimumWidth(140)
+        self.value_label.setMinimumWidth(70)
 
         self.slider.valueChanged.connect(self._on_slider)
         self.spin.valueChanged.connect(self._on_spin)
@@ -50,9 +50,16 @@ class DimSlider(QWidget):
 
     def _update_label(self, index: int) -> None:
         if self.coord is not None and index < len(self.coord):
-            self.value_label.setText(str(self.coord[index]))
+            value = self.coord[index]
+            if np.issubdtype(self.coord.dtype, np.datetime64):
+                text = str(np.datetime64(value, "s")).replace("T", " ")
+            else:
+                text = str(value)
+            self.value_label.setText(text)
+            self.value_label.setVisible(True)
         else:
-            self.value_label.setText(f"index {index}")
+            self.value_label.setText("")
+            self.value_label.setVisible(False)
 
     def index(self) -> int:
         return self.slider.value()
@@ -63,7 +70,8 @@ class DimControlsPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._layout = QFormLayout(self)
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(0, 0, 0, 0)
         self._sliders: dict[str, DimSlider] = {}
 
     def set_dims(
@@ -72,8 +80,11 @@ class DimControlsPanel(QWidget):
         coords: dict[str, np.ndarray],
         initial: dict[str, int] | None = None,
     ) -> None:
-        while self._layout.rowCount():
-            self._layout.removeRow(0)
+        while self._layout.count():
+            item = self._layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
         self._sliders.clear()
 
         initial = initial or {}
@@ -81,7 +92,8 @@ class DimControlsPanel(QWidget):
             slider = DimSlider(dim, size, coords.get(dim), initial.get(dim, 0))
             slider.valueChanged.connect(self.changed.emit)
             self._sliders[dim] = slider
-            self._layout.addRow(dim, slider)
+            self._layout.addWidget(QLabel(dim))
+            self._layout.addWidget(slider)
 
     def indexers(self) -> dict[str, int]:
         return {dim: s.index() for dim, s in self._sliders.items()}

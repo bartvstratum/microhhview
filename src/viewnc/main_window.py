@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDockWidget,
     QFileDialog,
-    QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
@@ -34,7 +33,7 @@ class MainWindow(QMainWindow):
     def __init__(self, path: str | None = None):
         super().__init__()
         self.setWindowTitle("viewnc")
-        self.resize(1000, 850)
+        self.resize(1050, 800)
 
         self.backend: Backend | None = None
         self.current_group: str | None = None
@@ -53,20 +52,6 @@ class MainWindow(QMainWindow):
         self.var_combo = QComboBox()
         self.var_combo.currentIndexChanged.connect(self._on_variable_selected)
 
-        selector = QWidget()
-        selector_layout = QVBoxLayout(selector)
-        selector_layout.addWidget(QLabel("Group:"))
-        selector_layout.addWidget(self.group_combo)
-        selector_layout.addWidget(QLabel("Variable:"))
-        selector_layout.addWidget(self.var_combo)
-        selector_layout.addStretch(1)
-
-        dock = QDockWidget("Variables", self)
-        dock.setWidget(selector)
-        dock.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable)
-        dock.setMaximumWidth(320)
-        self.addDockWidget(Qt.LeftDockWidgetArea, dock)
-
         self.y_label = QLabel("Y axis:")
         self.y_combo = QComboBox()
         self.x_label = QLabel("X axis:")
@@ -84,23 +69,30 @@ class MainWindow(QMainWindow):
 
         self._axis_widgets = [self.y_label, self.y_combo, self.x_label, self.x_combo, self.cmap_label, self.cmap_combo]
 
-        controls = QHBoxLayout()
-        for w in self._axis_widgets:
-            controls.addWidget(w)
-        controls.addStretch(1)
-
         self.dim_panel = DimControlsPanel()
         self.dim_panel.changed.connect(self._redraw)
 
+        sidebar = QWidget()
+        sidebar_layout = QVBoxLayout(sidebar)
+        sidebar_layout.addWidget(QLabel("Group:"))
+        sidebar_layout.addWidget(self.group_combo)
+        sidebar_layout.addWidget(QLabel("Variable:"))
+        sidebar_layout.addWidget(self.var_combo)
+        for w in self._axis_widgets:
+            sidebar_layout.addWidget(w)
+        sidebar_layout.addWidget(self.dim_panel)
+        sidebar_layout.addStretch(1)
+
+        dock = QDockWidget("Controls", self)
+        dock.setWidget(sidebar)
+        dock.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable)
+        dock.setMinimumWidth(230)
+        self.addDockWidget(Qt.LeftDockWidgetArea, dock)
+        self.resizeDocks([dock], [230], Qt.Horizontal)
+
         self.plot_widget = PlotWidget()
         self.plot_widget.pointClicked.connect(self._on_plot_clicked)
-
-        central = QWidget()
-        layout = QVBoxLayout(central)
-        layout.addLayout(controls)
-        layout.addWidget(self.dim_panel)
-        layout.addWidget(self.plot_widget, 1)
-        self.setCentralWidget(central)
+        self.setCentralWidget(self.plot_widget)
 
         self._set_2d_controls_visible(False)
 

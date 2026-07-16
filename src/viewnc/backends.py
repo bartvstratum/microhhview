@@ -107,7 +107,7 @@ class H5pyBackend(Backend):
                 group = "/" + group
             else:
                 group, var = ROOT_GROUP, full_name
-            dims = tuple(f"{var}:dim{i}" for i in range(obj.ndim))
+            dims = tuple(self._dim_name(obj, i, var) for i in range(obj.ndim))
             info = VarInfo(
                 name=var,
                 dims=dims,
@@ -116,6 +116,18 @@ class H5pyBackend(Backend):
                 attrs=dict(obj.attrs),
             )
             self._vars.setdefault(group, {})[var] = (info, full_name)
+
+    @staticmethod
+    def _dim_name(obj, index: int, var: str) -> str:
+        """Prefer the name of the attached HDF5 dimension scale (or its
+        label) over a synthetic placeholder, so plain HDF5-netCDF4 files
+        show real dimension names like "time" instead of "var:dim0"."""
+        dim = obj.dims[index]
+        if len(dim) > 0:
+            return dim[0].name.rsplit("/", 1)[-1]
+        if dim.label:
+            return dim.label
+        return f"{var}:dim{index}"
 
     def variables(self, group: str) -> dict[str, VarInfo]:
         return {name: info for name, (info, _) in self._vars.get(group, {}).items()}

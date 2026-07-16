@@ -66,7 +66,7 @@ class PlotWidget(QWidget):
         ax.set_ylabel(ylabel)
         ax.set_title(title)
         ax.set_box_aspect(1)
-        self.figure.colorbar(mesh, ax=ax)
+        self.figure.colorbar(mesh, ax=ax, shrink=0.75)
         self._ax = ax
         self._clickable = True
         self.canvas.draw_idle()
