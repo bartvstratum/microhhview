@@ -9,7 +9,7 @@ from .main_window import MainWindow
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(prog="viewnc", description="Quick NetCDF/HDF5 variable viewer")
+    parser = argparse.ArgumentParser(prog="microhhview", description="Quick NetCDF/HDF5 variable viewer")
     parser.add_argument("file", nargs="?", help="Path to a NetCDF or HDF5 file to open")
     args = parser.parse_args()
 

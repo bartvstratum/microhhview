@@ -6,7 +6,7 @@ from pathlib import Path
 
 from platformdirs import user_config_dir
 
-APP_NAME = "viewnc"
+APP_NAME = "microhhview"
 
 CONFIG_DIR = Path(user_config_dir(APP_NAME))
 CONFIG_PATH = CONFIG_DIR / "config.json"
@@ -28,11 +28,11 @@ def load_config() -> dict:
     Missing keys are backfilled from DEFAULT_CONFIG so older config
     files keep working after new settings are added."""
     if not CONFIG_PATH.exists():
-        print(f"viewnc: writing default config to {CONFIG_PATH}", file=sys.stderr)
+        print(f"microhhview: writing default config to {CONFIG_PATH}", file=sys.stderr)
         save_config(DEFAULT_CONFIG)
         return dict(DEFAULT_CONFIG)
 
-    print(f"viewnc: reading config from {CONFIG_PATH}", file=sys.stderr)
+    print(f"microhhview: reading config from {CONFIG_PATH}", file=sys.stderr)
     try:
         config = json.loads(CONFIG_PATH.read_text())
     except (OSError, ValueError):

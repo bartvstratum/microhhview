@@ -39,7 +39,7 @@ def _resolve_cmap(name: str):
 class MainWindow(QMainWindow):
     def __init__(self, path: str | None = None):
         super().__init__()
-        self.setWindowTitle("viewnc")
+        self.setWindowTitle("microhhview")
         self.resize(1050, 800)
 
         self.backend: Backend | None = None
@@ -73,7 +73,7 @@ class MainWindow(QMainWindow):
         for cmap_name in config["colormaps"]:
             cmap_obj = _resolve_cmap(cmap_name)
             if cmap_obj is None:
-                print(f"viewnc: unknown colormap {cmap_name!r} in config, skipping")
+                print(f"microhhview: unknown colormap {cmap_name!r} in config, skipping")
                 continue
             self.cmap_combo.addItem(cmap_name, cmap_obj)
         default_cmap = config.get("default_colormap")
@@ -138,7 +138,7 @@ class MainWindow(QMainWindow):
         self.backend = backend
         self.current_group = None
         self.current_var = None
-        self.setWindowTitle(f"viewnc — {Path(path).name}")
+        self.setWindowTitle(f"microhhview — {Path(path).name}")
 
         self.group_combo.blockSignals(True)
         self.group_combo.clear()
