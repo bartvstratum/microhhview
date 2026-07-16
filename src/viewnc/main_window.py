@@ -4,7 +4,6 @@ from pathlib import Path
 
 import colormaps as colormaps_pkg
 import matplotlib as mpl
-import matplotlib.dates as mdates
 import numpy as np
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -22,7 +21,7 @@ from .axis_prefs import default_xy
 from .backends import Backend, open_dataset
 from .config import load_config
 from .dim_controls import DimControlsPanel
-from .plot_widget import PlotWidget
+from .plot_widget import PlotWidget, nearest_index
 from .point_dialog import PointDialog
 
 FILE_FILTER = "NetCDF/HDF5 files (*.nc *.nc4 *.cdf *.h5 *.hdf5);;All files (*)"
@@ -262,13 +261,6 @@ class MainWindow(QMainWindow):
                 "slice_indexers": dict(indexers),
             }
 
-    @staticmethod
-    def _nearest_index(coord: np.ndarray, value: float) -> int:
-        coord = np.asarray(coord)
-        if np.issubdtype(coord.dtype, np.datetime64):
-            coord = mdates.date2num(coord)
-        return int(np.argmin(np.abs(coord - value)))
-
     def _on_plot_clicked(self, xdata: float, ydata: float) -> None:
         if self.backend is None or self.current_group is None or self.current_var is None:
             return
@@ -276,8 +268,8 @@ class MainWindow(QMainWindow):
             return
 
         state = self._current_2d
-        x_idx = self._nearest_index(state["x_coord"], xdata)
-        y_idx = self._nearest_index(state["y_coord"], ydata)
+        x_idx = nearest_index(state["x_coord"], xdata)
+        y_idx = nearest_index(state["y_coord"], ydata)
 
         point_indexers = dict(state["slice_indexers"])
         point_indexers[state["x_dim"]] = x_idx
