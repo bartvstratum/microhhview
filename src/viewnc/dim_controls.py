@@ -8,16 +8,19 @@ from PySide6.QtWidgets import QFormLayout, QHBoxLayout, QLabel, QSlider, QSpinBo
 class DimSlider(QWidget):
     valueChanged = Signal()
 
-    def __init__(self, dim: str, size: int, coord: np.ndarray | None, parent=None):
+    def __init__(self, dim: str, size: int, coord: np.ndarray | None, initial: int = 0, parent=None):
         super().__init__(parent)
         self.dim = dim
         self.coord = coord
         max_index = max(size - 1, 0)
+        initial = min(max(initial, 0), max_index)
 
         self.slider = QSlider(Qt.Horizontal)
         self.slider.setRange(0, max_index)
+        self.slider.setValue(initial)
         self.spin = QSpinBox()
         self.spin.setRange(0, max_index)
+        self.spin.setValue(initial)
         self.value_label = QLabel()
         self.value_label.setMinimumWidth(140)
 
@@ -29,7 +32,7 @@ class DimSlider(QWidget):
         layout.addWidget(self.slider, 1)
         layout.addWidget(self.spin)
         layout.addWidget(self.value_label)
-        self._update_label(0)
+        self._update_label(initial)
 
     def _on_slider(self, value: int) -> None:
         self.spin.blockSignals(True)
@@ -63,13 +66,19 @@ class DimControlsPanel(QWidget):
         self._layout = QFormLayout(self)
         self._sliders: dict[str, DimSlider] = {}
 
-    def set_dims(self, dims: list[tuple[str, int]], coords: dict[str, np.ndarray]) -> None:
+    def set_dims(
+        self,
+        dims: list[tuple[str, int]],
+        coords: dict[str, np.ndarray],
+        initial: dict[str, int] | None = None,
+    ) -> None:
         while self._layout.rowCount():
             self._layout.removeRow(0)
         self._sliders.clear()
 
+        initial = initial or {}
         for dim, size in dims:
-            slider = DimSlider(dim, size, coords.get(dim))
+            slider = DimSlider(dim, size, coords.get(dim), initial.get(dim, 0))
             slider.valueChanged.connect(self.changed.emit)
             self._sliders[dim] = slider
             self._layout.addRow(dim, slider)

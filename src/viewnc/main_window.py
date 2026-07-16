@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import matplotlib.dates as mdates
 import numpy as np
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -16,9 +17,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .axis_prefs import default_xy
 from .backends import Backend, open_dataset
 from .dim_controls import DimControlsPanel
 from .plot_widget import PlotWidget
+from .point_dialog import PointDialog
 
 CMAPS = ["viridis", "plasma", "inferno", "cividis", "coolwarm", "RdBu_r", "jet", "turbo", "gray"]
 
@@ -29,11 +32,13 @@ class MainWindow(QMainWindow):
     def __init__(self, path: str | None = None):
         super().__init__()
         self.setWindowTitle("viewnc")
-        self.resize(1400, 900)
+        self.resize(1000, 850)
 
         self.backend: Backend | None = None
         self.current_group: str | None = None
         self.current_var: str | None = None
+        self._current_2d: dict | None = None
+        self._popups: list[PointDialog] = []
 
         self._build_ui()
 
@@ -57,6 +62,7 @@ class MainWindow(QMainWindow):
         dock = QDockWidget("Variables", self)
         dock.setWidget(selector)
         dock.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable)
+        dock.setMaximumWidth(320)
         self.addDockWidget(Qt.LeftDockWidgetArea, dock)
 
         self.y_label = QLabel("Y axis:")
@@ -82,6 +88,7 @@ class MainWindow(QMainWindow):
         self.dim_panel.changed.connect(self._redraw)
 
         self.plot_widget = PlotWidget()
+        self.plot_widget.pointClicked.connect(self._on_plot_clicked)
 
         central = QWidget()
         layout = QVBoxLayout(central)
@@ -124,7 +131,9 @@ class MainWindow(QMainWindow):
 
         self.group_combo.blockSignals(True)
         self.group_combo.clear()
-        self.group_combo.addItems(backend.groups)
+        for g in backend.groups:
+            label = "(root)" if g == "/" else g.lstrip("/")
+            self.group_combo.addItem(label, g)
         self.group_combo.blockSignals(False)
 
         if backend.groups:
@@ -133,7 +142,9 @@ class MainWindow(QMainWindow):
     def _on_group_selected(self, _index: int) -> None:
         if self.backend is None:
             return
-        group = self.group_combo.currentText()
+        group = self.group_combo.currentData()
+        if group is None:
+            return
         self.current_group = group
 
         self.var_combo.blockSignals(True)
@@ -174,8 +185,9 @@ class MainWindow(QMainWindow):
         self.x_combo.addItems(info.dims)
         self.y_combo.addItems(info.dims)
         if is_2d_plot:
-            self.y_combo.setCurrentText(plot_dims[0])
-            self.x_combo.setCurrentText(plot_dims[1])
+            y_dim, x_dim = default_xy((plot_dims[0], plot_dims[1]))
+            self.y_combo.setCurrentText(y_dim)
+            self.x_combo.setCurrentText(x_dim)
         self.x_combo.blockSignals(False)
         self.y_combo.blockSignals(False)
 
@@ -197,6 +209,7 @@ class MainWindow(QMainWindow):
         result_dims = [d for d in info.dims if d not in indexers]
 
         if len(result_dims) == 1:
+            self._current_2d = None
             dim = result_dims[0]
             coord = self.backend.coord(group, dim)
             x = coord if coord is not None else np.arange(raw.shape[0])
@@ -205,7 +218,7 @@ class MainWindow(QMainWindow):
             y_dim = self.y_combo.currentText() or result_dims[0]
             x_dim = self.x_combo.currentText() or result_dims[1]
             if y_dim not in result_dims or x_dim not in result_dims or x_dim == y_dim:
-                y_dim, x_dim = result_dims[0], result_dims[1]
+                y_dim, x_dim = default_xy((result_dims[0], result_dims[1]))
 
             data2d = np.transpose(raw, (result_dims.index(y_dim), result_dims.index(x_dim)))
             xc = self.backend.coord(group, x_dim)
@@ -215,3 +228,38 @@ class MainWindow(QMainWindow):
             self.plot_widget.plot_pcolormesh(
                 x, y, data2d, xlabel=x_dim, ylabel=y_dim, title=name, cmap=self.cmap_combo.currentText()
             )
+            self._current_2d = {
+                "x_dim": x_dim,
+                "y_dim": y_dim,
+                "x_coord": x,
+                "y_coord": y,
+                "slice_indexers": dict(indexers),
+            }
+
+    @staticmethod
+    def _nearest_index(coord: np.ndarray, value: float) -> int:
+        coord = np.asarray(coord)
+        if np.issubdtype(coord.dtype, np.datetime64):
+            coord = mdates.date2num(coord)
+        return int(np.argmin(np.abs(coord - value)))
+
+    def _on_plot_clicked(self, xdata: float, ydata: float) -> None:
+        if self.backend is None or self.current_group is None or self.current_var is None:
+            return
+        if self._current_2d is None:
+            return
+
+        state = self._current_2d
+        x_idx = self._nearest_index(state["x_coord"], xdata)
+        y_idx = self._nearest_index(state["y_coord"], ydata)
+
+        point_indexers = dict(state["slice_indexers"])
+        point_indexers[state["x_dim"]] = x_idx
+        point_indexers[state["y_dim"]] = y_idx
+
+        info = self.backend.variables(self.current_group)[self.current_var]
+        dlg = PointDialog(self, self.backend, self.current_group, self.current_var, info, point_indexers)
+        dlg.setAttribute(Qt.WA_DeleteOnClose)
+        dlg.destroyed.connect(lambda: self._popups.remove(dlg) if dlg in self._popups else None)
+        self._popups.append(dlg)
+        dlg.show()
