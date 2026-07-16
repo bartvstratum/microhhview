@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import colormaps as colormaps_pkg
+import matplotlib as mpl
 import matplotlib.dates as mdates
 import numpy as np
 from PySide6.QtCore import Qt
@@ -19,14 +20,21 @@ from PySide6.QtWidgets import (
 
 from .axis_prefs import default_xy
 from .backends import Backend, open_dataset
+from .config import load_config
 from .dim_controls import DimControlsPanel
 from .plot_widget import PlotWidget
 from .point_dialog import PointDialog
 
-MPL_CMAPS = ["viridis", "plasma", "inferno", "cividis", "coolwarm", "RdBu_r", "jet", "turbo", "gray"]
-DEFAULT_CMAP = "WhiteBlueGreenYellowRed"
-
 FILE_FILTER = "NetCDF/HDF5 files (*.nc *.nc4 *.cdf *.h5 *.hdf5);;All files (*)"
+
+
+def _resolve_cmap(name: str):
+    """Look up a colormap name from the user config against matplotlib's
+    registry first, then the `colormaps` package. Returns None if the
+    name isn't recognized by either."""
+    if name in mpl.colormaps:
+        return name
+    return getattr(colormaps_pkg, name, None)
 
 
 class MainWindow(QMainWindow):
@@ -59,12 +67,19 @@ class MainWindow(QMainWindow):
         self.x_combo.currentIndexChanged.connect(self._on_axis_changed)
         self.y_combo.currentIndexChanged.connect(self._on_axis_changed)
 
+        config = load_config()
+
         self.cmap_label = QLabel("Colormap:")
         self.cmap_combo = QComboBox()
-        for cmap_name in MPL_CMAPS:
-            self.cmap_combo.addItem(cmap_name, cmap_name)
-        self.cmap_combo.addItem(DEFAULT_CMAP, getattr(colormaps_pkg, DEFAULT_CMAP))
-        self.cmap_combo.setCurrentText(DEFAULT_CMAP)
+        for cmap_name in config["colormaps"]:
+            cmap_obj = _resolve_cmap(cmap_name)
+            if cmap_obj is None:
+                print(f"viewnc: unknown colormap {cmap_name!r} in config, skipping")
+                continue
+            self.cmap_combo.addItem(cmap_name, cmap_obj)
+        default_cmap = config.get("default_colormap")
+        if default_cmap and self.cmap_combo.findText(default_cmap) >= 0:
+            self.cmap_combo.setCurrentText(default_cmap)
         self.cmap_combo.currentIndexChanged.connect(self._redraw)
 
         self._axis_widgets = [self.y_label, self.y_combo, self.x_label, self.x_combo, self.cmap_label, self.cmap_combo]
