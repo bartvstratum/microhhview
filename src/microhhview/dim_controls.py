@@ -107,3 +107,6 @@ class DimControlsPanel(QWidget):
 
     def indexers(self) -> dict[str, int]:
         return {dim: s.index() for dim, s in self._sliders.items()}
+
+    def slider_for(self, dim: str) -> DimSlider | None:
+        return self._sliders.get(dim)

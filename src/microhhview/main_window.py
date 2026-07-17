@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .animate_controls import AnimateControls
 from .axis_prefs import default_xy, dim_label
 from .backends import Backend, open_dataset
 from .config import load_config
@@ -176,6 +177,8 @@ class MainWindow(QMainWindow):
         self.dim_panel = DimControlsPanel()
         self.dim_panel.changed.connect(self._redraw)
 
+        self.animate_controls = AnimateControls()
+
         sidebar = QWidget()
         sidebar_layout = QVBoxLayout(sidebar)
         sidebar_layout.setSpacing(4)
@@ -189,6 +192,9 @@ class MainWindow(QMainWindow):
             sidebar_layout.addWidget(w)
         sidebar_layout.addWidget(_section_header("Dimensions"))
         sidebar_layout.addWidget(self.dim_panel)
+        animate_section = CollapsibleSection("Animate", collapsed=True)
+        animate_section.add_widget(self.animate_controls)
+        sidebar_layout.addWidget(animate_section)
         colors_section = CollapsibleSection("Colors", collapsed=True)
         for w in color_widgets:
             colors_section.add_widget(w)
@@ -266,6 +272,7 @@ class MainWindow(QMainWindow):
         else:
             self.current_var = None
             self.plot_widget.clear()
+            self.animate_controls.set_time_slider(None)
 
     def _on_variable_selected(self, _index: int) -> None:
         if self.backend is None or self.current_group is None:
@@ -345,6 +352,7 @@ class MainWindow(QMainWindow):
         coords = {d: self.backend.coord(self.current_group, d) for d, _ in dims_sizes}
         units = {d: self.backend.units(self.current_group, d) for d, _ in dims_sizes}
         self.dim_panel.set_dims(dims_sizes, coords, units, initial=previous)
+        self.animate_controls.set_time_slider(self.dim_panel.slider_for("time"))
 
     def _redraw(self) -> None:
         if self.backend is None or self.current_group is None or self.current_var is None:
