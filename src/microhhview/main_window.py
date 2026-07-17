@@ -222,8 +222,7 @@ class MainWindow(QMainWindow):
             self._on_variable_selected(0)
         else:
             self.current_var = None
-            self.plot_widget.figure.clear()
-            self.plot_widget.canvas.draw_idle()
+            self.plot_widget.clear()
 
     def _on_variable_selected(self, _index: int) -> None:
         if self.backend is None or self.current_group is None:

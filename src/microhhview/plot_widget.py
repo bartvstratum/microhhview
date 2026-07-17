@@ -27,6 +27,12 @@ class PlotWidget(QWidget):
         self.toolbar = NavigationToolbar2QT(self.canvas, self)
         self._ax = None
         self._clickable = False
+        self._mesh = None
+        self._pcolor_xlabel: str | None = None
+        self._pcolor_ylabel: str | None = None
+        self._pcolor_cmap: str | Colormap | None = None
+        self._pcolor_x: np.ndarray | None = None
+        self._pcolor_y: np.ndarray | None = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
@@ -42,8 +48,16 @@ class PlotWidget(QWidget):
             return
         self.pointClicked.emit(event.xdata, event.ydata)
 
+    def clear(self) -> None:
+        self.figure.clear()
+        self._ax = None
+        self._clickable = False
+        self._mesh = None
+        self.canvas.draw_idle()
+
     def plot_line(self, x, y, *, xlabel: str = "", ylabel: str = "", title: str = "") -> None:
         self.figure.clear()
+        self._mesh = None
         ax = self.figure.add_subplot(111)
         ax.plot(x, y)
         ax.set_xlabel(xlabel)
@@ -68,16 +82,52 @@ class PlotWidget(QWidget):
         vmin: float | None = None,
         vmax: float | None = None,
     ) -> None:
-        self.figure.clear()
-        ax = self.figure.add_subplot(111)
-        mesh = ax.pcolormesh(x, y, data, cmap=cmap, shading="auto", vmin=vmin, vmax=vmax)
-        mesh.set_mouseover(False)  # avoid a duplicate auto "[value]" line from the mesh itself
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel(ylabel)
-        ax.set_title(title)
-        self.figure.colorbar(mesh, ax=ax, shrink=0.75)
+        x = np.asarray(x)
+        y = np.asarray(y)
+        # Scrubbing a dimension slider keeps the same grid and only changes
+        # the data values, so update the existing mesh in place instead of
+        # tearing down and rebuilding the whole figure (axes, colorbar,
+        # layout) on every step -- that rebuild is what made the sliders
+        # feel janky.
+        reuse = (
+            self._mesh is not None
+            and self._pcolor_xlabel == xlabel
+            and self._pcolor_ylabel == ylabel
+            and self._pcolor_cmap == cmap
+            and self._pcolor_x is not None
+            and self._pcolor_y is not None
+            and self._pcolor_x.shape == x.shape
+            and self._pcolor_y.shape == y.shape
+            and np.array_equal(self._pcolor_x, x)
+            and np.array_equal(self._pcolor_y, y)
+        )
+        if reuse:
+            ax = self._ax
+            mesh = self._mesh
+            mesh.set_array(data.ravel())
+            if vmin is None and vmax is None:
+                mesh.autoscale()
+            else:
+                mesh.set_clim(vmin, vmax)
+            ax.set_title(title)
+        else:
+            self.figure.clear()
+            ax = self.figure.add_subplot(111)
+            mesh = ax.pcolormesh(x, y, data, cmap=cmap, shading="auto", vmin=vmin, vmax=vmax)
+            mesh.set_mouseover(False)  # avoid a duplicate auto "[value]" line from the mesh itself
+            ax.set_xlabel(xlabel)
+            ax.set_ylabel(ylabel)
+            ax.set_title(title)
+            self.figure.colorbar(mesh, ax=ax, shrink=0.75)
+            self._ax = ax
+            self._mesh = mesh
+            self._pcolor_xlabel = xlabel
+            self._pcolor_ylabel = ylabel
+            self._pcolor_cmap = cmap
+            self._pcolor_x = x
+            self._pcolor_y = y
+
         ax.format_coord = self._make_format_coord(ax, x, y, data)
-        self._ax = ax
         self._clickable = True
         self.canvas.draw_idle()
 
