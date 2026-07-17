@@ -26,6 +26,7 @@ from .animate_controls import AnimateControls
 from .axis_prefs import default_xy, dim_label
 from .backends import Backend, open_dataset
 from .config import load_config
+from .cross_files import parse_cross_filename, resolve_domain_files
 from .dim_controls import DimControlsPanel
 from .plot_widget import PlotWidget, nearest_index
 from .point_dialog import PointDialog
@@ -95,12 +96,12 @@ def _resolve_cmap(name: str):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, path: str | None = None):
+    def __init__(self, paths: list[str] | None = None):
         super().__init__()
         self.setWindowTitle("microhhview")
         self.resize(1050, 800)
 
-        self.backend: Backend | None = None
+        self.backends: list[Backend] = []
         self.current_group: str | None = None
         self.current_var: str | None = None
         self._current_2d: dict | None = None
@@ -108,8 +109,8 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
 
-        if path:
-            self.open_file(path)
+        if paths:
+            self.open_files(paths)
 
     def _build_ui(self) -> None:
         self.group_combo = QComboBox()
@@ -237,36 +238,54 @@ class MainWindow(QMainWindow):
             self.plot_widget.end_fast_updates()
 
     def _on_open_clicked(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Open dataset", "", FILE_FILTER)
-        if path:
-            self.open_file(path)
+        paths, _ = QFileDialog.getOpenFileNames(self, "Open dataset", "", FILE_FILTER)
+        if paths:
+            self.open_files(paths)
 
-    def open_file(self, path: str) -> None:
+    def open_files(self, paths: list[str]) -> None:
+        resolved = [Path(p) for p in paths]
         try:
-            backend = open_dataset(path)
+            resolved = resolve_domain_files(resolved)
+        except ValueError as exc:
+            QMessageBox.critical(self, "Can't overlay these files", str(exc))
+            return
+
+        backends = []
+        try:
+            for p in resolved:
+                backends.append(open_dataset(p))
         except Exception as exc:
+            for b in backends:
+                b.close()
             QMessageBox.critical(self, "Failed to open file", str(exc))
             return
 
-        if self.backend is not None:
-            self.backend.close()
-        self.backend = backend
+        for b in self.backends:
+            b.close()
+        self.backends = backends
         self.current_group = None
         self.current_var = None
-        self.setWindowTitle(f"microhhview — {Path(path).name}")
 
+        if len(resolved) == 1:
+            self.setWindowTitle(f"microhhview — {resolved[0].name}")
+        else:
+            base = parse_cross_filename(resolved[0])
+            domains = ",".join(parse_cross_filename(p).domain_str for p in resolved)
+            self.setWindowTitle(f"microhhview — {base.var}.{base.plane}.cross.{{{domains}}}.{base.ext}")
+
+        base_backend = self.backends[0]
         self.group_combo.blockSignals(True)
         self.group_combo.clear()
-        for g in backend.groups:
+        for g in base_backend.groups:
             label = "(root)" if g == "/" else g.lstrip("/")
             self.group_combo.addItem(label, g)
         self.group_combo.blockSignals(False)
 
-        if backend.groups:
+        if base_backend.groups:
             self._on_group_selected(0)
 
     def _on_group_selected(self, _index: int) -> None:
-        if self.backend is None:
+        if not self.backends:
             return
         group = self.group_combo.currentData()
         if group is None:
@@ -275,7 +294,7 @@ class MainWindow(QMainWindow):
 
         self.var_combo.blockSignals(True)
         self.var_combo.clear()
-        self.var_combo.addItems(sorted(self.backend.variables(group).keys()))
+        self.var_combo.addItems(sorted(self.backends[0].variables(group).keys()))
         self.var_combo.blockSignals(False)
 
         if self.var_combo.count():
@@ -286,13 +305,13 @@ class MainWindow(QMainWindow):
             self.animate_controls.set_time_slider(None)
 
     def _on_variable_selected(self, _index: int) -> None:
-        if self.backend is None or self.current_group is None:
+        if not self.backends or self.current_group is None:
             return
         name = self.var_combo.currentText()
         if not name:
             return
         self.current_var = name
-        info = self.backend.variables(self.current_group)[name]
+        info = self.backends[0].variables(self.current_group)[name]
 
         is_2d_plot = len(info.dims) >= 2
         self._set_2d_controls_visible(is_2d_plot)
@@ -330,11 +349,16 @@ class MainWindow(QMainWindow):
         self._redraw()
 
     def _fill_global_range(self) -> None:
-        if self.backend is None or self.current_group is None or self.current_var is None:
+        if not self.backends or self.current_group is None or self.current_var is None:
             return
-        full = self.backend.read(self.current_group, self.current_var, {})
-        self.vmin_edit.setText(f"{np.nanmin(full):.4g}")
-        self.vmax_edit.setText(f"{np.nanmax(full):.4g}")
+        mins = []
+        maxs = []
+        for b in self.backends:
+            full = b.read(self.current_group, self.current_var, {})
+            mins.append(np.nanmin(full))
+            maxs.append(np.nanmax(full))
+        self.vmin_edit.setText(f"{min(mins):.4g}")
+        self.vmax_edit.setText(f"{max(maxs):.4g}")
 
     @staticmethod
     def _parse_float(text: str) -> float | None:
@@ -346,10 +370,13 @@ class MainWindow(QMainWindow):
     def _update_dim_panel(self) -> None:
         """Rebuild the slice-dimension sliders for every dim that isn't
         currently plotted on the x/y axis, keeping any prior slider
-        positions that still apply."""
-        if self.backend is None or self.current_group is None or self.current_var is None:
+        positions that still apply. Sliders are built from the base
+        (coarsest) domain only -- in overlay mode the same index is applied
+        to every domain, with no cross-domain consistency checks."""
+        if not self.backends or self.current_group is None or self.current_var is None:
             return
-        info = self.backend.variables(self.current_group)[self.current_var]
+        base = self.backends[0]
+        info = base.variables(self.current_group)[self.current_var]
 
         x_dim = self.x_combo.currentText()
         y_dim = self.y_combo.currentText()
@@ -360,29 +387,30 @@ class MainWindow(QMainWindow):
 
         previous = self.dim_panel.indexers()
         dims_sizes = [(d, s) for d, s in zip(info.dims, info.shape) if d in slice_dims]
-        coords = {d: self.backend.coord(self.current_group, d) for d, _ in dims_sizes}
-        units = {d: self.backend.units(self.current_group, d) for d, _ in dims_sizes}
+        coords = {d: base.coord(self.current_group, d) for d, _ in dims_sizes}
+        units = {d: base.units(self.current_group, d) for d, _ in dims_sizes}
         self.dim_panel.set_dims(dims_sizes, coords, units, initial=previous)
         self.animate_controls.set_time_slider(self.dim_panel.slider_for("time"))
 
     def _redraw(self) -> None:
-        if self.backend is None or self.current_group is None or self.current_var is None:
+        if not self.backends or self.current_group is None or self.current_var is None:
             return
         group = self.current_group
         name = self.current_var
-        info = self.backend.variables(group)[name]
+        base = self.backends[0]
+        info = base.variables(group)[name]
         indexers = self.dim_panel.indexers()
 
-        raw = self.backend.read(group, name, indexers)
         result_dims = [d for d in info.dims if d not in indexers]
 
         if len(result_dims) == 1:
             self._current_2d = None
+            raw = base.read(group, name, indexers)
             dim = result_dims[0]
-            coord = self.backend.coord(group, dim)
+            coord = base.coord(group, dim)
             x = coord if coord is not None else np.arange(raw.shape[0])
-            xlabel = dim_label(dim, self.backend.units(group, dim))
-            ylabel = dim_label(name, self.backend.units(group, name))
+            xlabel = dim_label(dim, base.units(group, dim))
+            ylabel = dim_label(name, base.units(group, name))
             self.plot_widget.plot_line(x, raw, xlabel=xlabel, ylabel=ylabel, title=name)
         elif len(result_dims) == 2:
             y_dim = self.y_combo.currentText() or result_dims[0]
@@ -390,11 +418,17 @@ class MainWindow(QMainWindow):
             if y_dim not in result_dims or x_dim not in result_dims or x_dim == y_dim:
                 y_dim, x_dim = default_xy((result_dims[0], result_dims[1]))
 
-            data2d = np.transpose(raw, (result_dims.index(y_dim), result_dims.index(x_dim)))
-            xc = self.backend.coord(group, x_dim)
-            yc = self.backend.coord(group, y_dim)
-            x = xc if xc is not None else np.arange(data2d.shape[1])
-            y = yc if yc is not None else np.arange(data2d.shape[0])
+            layers = []
+            layer_states = []
+            for b in self.backends:
+                raw_b = b.read(group, name, indexers)
+                data2d = np.transpose(raw_b, (result_dims.index(y_dim), result_dims.index(x_dim)))
+                xc = b.coord(group, x_dim)
+                yc = b.coord(group, y_dim)
+                x = xc if xc is not None else np.arange(data2d.shape[1])
+                y = yc if yc is not None else np.arange(data2d.shape[0])
+                layers.append((x, y, data2d))
+                layer_states.append({"backend": b, "x_coord": x, "y_coord": y})
 
             if self.autoscale_checkbox.isChecked():
                 vmin = vmax = None
@@ -402,13 +436,11 @@ class MainWindow(QMainWindow):
                 vmin = self._parse_float(self.vmin_edit.text())
                 vmax = self._parse_float(self.vmax_edit.text())
 
-            if not (self._animating and self.plot_widget.update_data_fast(data2d)):
+            if not (self._animating and self.plot_widget.update_data_fast([d for _, _, d in layers])):
                 self.plot_widget.plot_pcolormesh(
-                    x,
-                    y,
-                    data2d,
-                    xlabel=dim_label(x_dim, self.backend.units(group, x_dim)),
-                    ylabel=dim_label(y_dim, self.backend.units(group, y_dim)),
+                    layers,
+                    xlabel=dim_label(x_dim, base.units(group, x_dim)),
+                    ylabel=dim_label(y_dim, base.units(group, y_dim)),
                     title=name,
                     cmap=self.cmap_combo.currentData(),
                     vmin=vmin,
@@ -417,27 +449,37 @@ class MainWindow(QMainWindow):
             self._current_2d = {
                 "x_dim": x_dim,
                 "y_dim": y_dim,
-                "x_coord": x,
-                "y_coord": y,
                 "slice_indexers": dict(indexers),
+                "layers": layer_states,
             }
 
     def _on_plot_clicked(self, xdata: float, ydata: float) -> None:
-        if self.backend is None or self.current_group is None or self.current_var is None:
+        if not self.backends or self.current_group is None or self.current_var is None:
             return
         if self._current_2d is None:
             return
 
         state = self._current_2d
-        x_idx = nearest_index(state["x_coord"], xdata)
-        y_idx = nearest_index(state["y_coord"], ydata)
+        # Pick the finest (last-drawn, topmost) domain whose extent
+        # contains the click, since that's what's visually on top where
+        # nested domains overlap; fall back to the coarsest (base) layer.
+        chosen = state["layers"][0]
+        for layer in reversed(state["layers"]):
+            xc, yc = layer["x_coord"], layer["y_coord"]
+            if xc.min() <= xdata <= xc.max() and yc.min() <= ydata <= yc.max():
+                chosen = layer
+                break
+
+        backend = chosen["backend"]
+        x_idx = nearest_index(chosen["x_coord"], xdata)
+        y_idx = nearest_index(chosen["y_coord"], ydata)
 
         point_indexers = dict(state["slice_indexers"])
         point_indexers[state["x_dim"]] = x_idx
         point_indexers[state["y_dim"]] = y_idx
 
-        info = self.backend.variables(self.current_group)[self.current_var]
-        dlg = PointDialog(self, self.backend, self.current_group, self.current_var, info, point_indexers)
+        info = backend.variables(self.current_group)[self.current_var]
+        dlg = PointDialog(self, backend, self.current_group, self.current_var, info, point_indexers)
         dlg.setAttribute(Qt.WA_DeleteOnClose)
         dlg.destroyed.connect(lambda: self._popups.remove(dlg) if dlg in self._popups else None)
         self._popups.append(dlg)
