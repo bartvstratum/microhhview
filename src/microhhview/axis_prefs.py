@@ -29,3 +29,12 @@ def default_sweep_dim(dims: tuple[str, ...]) -> str:
         if d in X_AXIS_DIMS:
             return d
     return dims[0] if dims else ""
+
+
+def dim_label(name: str, units: str | None) -> str:
+    """"name (units)" for axis/coordinate labels. Skips units for "time":
+    either it's a decoded datetime (self-explanatory) or a raw "seconds
+    since ..." style unit that's meaningless out of context."""
+    if units and name != "time":
+        return f"{name} ({units})"
+    return name

@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 from PySide6.QtWidgets import QComboBox, QDialog, QHBoxLayout, QLabel, QVBoxLayout
 
-from .axis_prefs import Y_AXIS_DIMS, default_sweep_dim
+from .axis_prefs import Y_AXIS_DIMS, default_sweep_dim, dim_label
 from .backends import Backend, VarInfo
 from .dim_controls import DimControlsPanel
 from .plot_widget import PlotWidget
@@ -61,7 +61,8 @@ class PointDialog(QDialog):
 
         other_dims = [(d, s) for d, s in zip(self.info.dims, self.info.shape) if d != sweep_dim]
         coords = {d: self.backend.coord(self.group, d) for d, _ in other_dims}
-        self.dim_panel.set_dims(other_dims, coords, initial=self.other_indexers)
+        units = {d: self.backend.units(self.group, d) for d, _ in other_dims}
+        self.dim_panel.set_dims(other_dims, coords, units, initial=self.other_indexers)
         self._redraw()
 
     def _redraw(self) -> None:
@@ -76,8 +77,10 @@ class PointDialog(QDialog):
         others = ", ".join(f"{d}={i}" for d, i in indexers.items())
         title = f"{self.name} vs {sweep_dim}" + (f"  ({others})" if others else "")
 
+        var_label = dim_label(self.name, self.backend.units(self.group, self.name))
+        sweep_label = dim_label(sweep_dim, self.backend.units(self.group, sweep_dim))
         if sweep_dim in Y_AXIS_DIMS:
             # Vertical-profile convention: height on the y-axis, value on x.
-            self.plot_widget.plot_line(raw, x, xlabel=self.name, ylabel=sweep_dim, title=title)
+            self.plot_widget.plot_line(raw, x, xlabel=var_label, ylabel=sweep_label, title=title)
         else:
-            self.plot_widget.plot_line(x, raw, xlabel=sweep_dim, ylabel=self.name, title=title)
+            self.plot_widget.plot_line(x, raw, xlabel=sweep_label, ylabel=var_label, title=title)

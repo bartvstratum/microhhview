@@ -8,10 +8,19 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QSlider, QSpinBox, QVBoxLayou
 class DimSlider(QWidget):
     valueChanged = Signal()
 
-    def __init__(self, dim: str, size: int, coord: np.ndarray | None, initial: int = 0, parent=None):
+    def __init__(
+        self,
+        dim: str,
+        size: int,
+        coord: np.ndarray | None,
+        units: str | None = None,
+        initial: int = 0,
+        parent=None,
+    ):
         super().__init__(parent)
         self.dim = dim
         self.coord = coord
+        self.units = units
         max_index = max(size - 1, 0)
         initial = min(max(initial, 0), max_index)
 
@@ -54,6 +63,8 @@ class DimSlider(QWidget):
                 text = str(np.datetime64(value, "s")).replace("T", " ")
             else:
                 text = str(value)
+                if self.units and self.dim != "time":
+                    text = f"{text} {self.units}"
             self.name_label.setText(f"{self.dim} ({text})")
         else:
             self.name_label.setText(self.dim)
@@ -75,6 +86,7 @@ class DimControlsPanel(QWidget):
         self,
         dims: list[tuple[str, int]],
         coords: dict[str, np.ndarray],
+        units: dict[str, str | None] | None = None,
         initial: dict[str, int] | None = None,
     ) -> None:
         while self._layout.count():
@@ -84,9 +96,10 @@ class DimControlsPanel(QWidget):
                 widget.deleteLater()
         self._sliders.clear()
 
+        units = units or {}
         initial = initial or {}
         for dim, size in dims:
-            slider = DimSlider(dim, size, coords.get(dim), initial.get(dim, 0))
+            slider = DimSlider(dim, size, coords.get(dim), units.get(dim), initial.get(dim, 0))
             slider.valueChanged.connect(self.changed.emit)
             self._sliders[dim] = slider
             self._layout.addWidget(slider.name_label)

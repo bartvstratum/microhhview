@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .axis_prefs import default_xy
+from .axis_prefs import default_xy, dim_label
 from .backends import Backend, open_dataset
 from .config import load_config
 from .dim_controls import DimControlsPanel
@@ -343,7 +343,8 @@ class MainWindow(QMainWindow):
         previous = self.dim_panel.indexers()
         dims_sizes = [(d, s) for d, s in zip(info.dims, info.shape) if d in slice_dims]
         coords = {d: self.backend.coord(self.current_group, d) for d, _ in dims_sizes}
-        self.dim_panel.set_dims(dims_sizes, coords, initial=previous)
+        units = {d: self.backend.units(self.current_group, d) for d, _ in dims_sizes}
+        self.dim_panel.set_dims(dims_sizes, coords, units, initial=previous)
 
     def _redraw(self) -> None:
         if self.backend is None or self.current_group is None or self.current_var is None:
@@ -361,7 +362,9 @@ class MainWindow(QMainWindow):
             dim = result_dims[0]
             coord = self.backend.coord(group, dim)
             x = coord if coord is not None else np.arange(raw.shape[0])
-            self.plot_widget.plot_line(x, raw, xlabel=dim, ylabel=name, title=name)
+            xlabel = dim_label(dim, self.backend.units(group, dim))
+            ylabel = dim_label(name, self.backend.units(group, name))
+            self.plot_widget.plot_line(x, raw, xlabel=xlabel, ylabel=ylabel, title=name)
         elif len(result_dims) == 2:
             y_dim = self.y_combo.currentText() or result_dims[0]
             x_dim = self.x_combo.currentText() or result_dims[1]
@@ -384,8 +387,8 @@ class MainWindow(QMainWindow):
                 x,
                 y,
                 data2d,
-                xlabel=x_dim,
-                ylabel=y_dim,
+                xlabel=dim_label(x_dim, self.backend.units(group, x_dim)),
+                ylabel=dim_label(y_dim, self.backend.units(group, y_dim)),
                 title=name,
                 cmap=self.cmap_combo.currentData(),
                 vmin=vmin,

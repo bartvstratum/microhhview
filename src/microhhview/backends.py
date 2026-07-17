@@ -34,6 +34,10 @@ class Backend:
     def coord(self, group: str, dim: str) -> np.ndarray | None:
         raise NotImplementedError
 
+    def units(self, group: str, name: str) -> str | None:
+        """The "units" attribute of a coordinate or variable, if any."""
+        raise NotImplementedError
+
     def read(self, group: str, name: str, indexers: dict[str, int]) -> np.ndarray:
         """Read a variable, collapsing each dim named in `indexers` to a
         single index. Remaining dims keep the variable's original order."""
@@ -79,6 +83,12 @@ class DataTreeBackend(Backend):
         ds = self._nodes[group].dataset
         if dim in ds.coords:
             return ds.coords[dim].values
+        return None
+
+    def units(self, group: str, name: str) -> str | None:
+        ds = self._nodes[group].dataset
+        if name in ds.variables:
+            return ds.variables[name].attrs.get("units")
         return None
 
     def read(self, group: str, name: str, indexers: dict[str, int]) -> np.ndarray:
@@ -138,6 +148,9 @@ class H5pyBackend(Backend):
         return {name: info for name, (info, _) in self._vars.get(group, {}).items()}
 
     def coord(self, group: str, dim: str) -> np.ndarray | None:
+        return None
+
+    def units(self, group: str, name: str) -> str | None:
         return None
 
     def read(self, group: str, name: str, indexers: dict[str, int]) -> np.ndarray:
