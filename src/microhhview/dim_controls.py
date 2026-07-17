@@ -15,14 +15,14 @@ class DimSlider(QWidget):
         max_index = max(size - 1, 0)
         initial = min(max(initial, 0), max_index)
 
+        self.name_label = QLabel()
+
         self.slider = QSlider(Qt.Horizontal)
         self.slider.setRange(0, max_index)
         self.slider.setValue(initial)
         self.spin = QSpinBox()
         self.spin.setRange(0, max_index)
         self.spin.setValue(initial)
-        self.value_label = QLabel()
-        self.value_label.setMinimumWidth(70)
 
         self.slider.valueChanged.connect(self._on_slider)
         self.spin.valueChanged.connect(self._on_spin)
@@ -31,7 +31,6 @@ class DimSlider(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.slider, 1)
         layout.addWidget(self.spin)
-        layout.addWidget(self.value_label)
         self._update_label(initial)
 
     def _on_slider(self, value: int) -> None:
@@ -55,11 +54,9 @@ class DimSlider(QWidget):
                 text = str(np.datetime64(value, "s")).replace("T", " ")
             else:
                 text = str(value)
-            self.value_label.setText(text)
-            self.value_label.setVisible(True)
+            self.name_label.setText(f"{self.dim} ({text})")
         else:
-            self.value_label.setText("")
-            self.value_label.setVisible(False)
+            self.name_label.setText(self.dim)
 
     def index(self) -> int:
         return self.slider.value()
@@ -92,7 +89,7 @@ class DimControlsPanel(QWidget):
             slider = DimSlider(dim, size, coords.get(dim), initial.get(dim, 0))
             slider.valueChanged.connect(self.changed.emit)
             self._sliders[dim] = slider
-            self._layout.addWidget(QLabel(dim))
+            self._layout.addWidget(slider.name_label)
             self._layout.addWidget(slider)
 
     def indexers(self) -> dict[str, int]:

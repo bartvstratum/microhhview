@@ -52,7 +52,12 @@ class DataTreeBackend(Backend):
         import xarray as xr
 
         self.path = path
-        self._tree = xr.open_datatree(path, decode_times=True)
+        try:
+            self._tree = xr.open_datatree(path, decode_times=True)
+        except ValueError:
+            # Some files (e.g. MicroHH output) use non-CF time units like
+            # "seconds since start", which xarray refuses to decode.
+            self._tree = xr.open_datatree(path, decode_times=False)
         self._nodes = {node.path: node for node in self._tree.subtree}
         self.groups = sorted(self._nodes.keys())
 
