@@ -42,6 +42,48 @@ def _section_header(text: str) -> QLabel:
     return label
 
 
+class CollapsibleSection(QWidget):
+    """A sidebar section whose contents can be toggled show/hide, so
+    rarely-changed controls don't crowd out the ones used every frame."""
+
+    def __init__(self, title: str, collapsed: bool = True, parent=None):
+        super().__init__(parent)
+        self._title = title.upper()
+
+        self._toggle = QPushButton()
+        self._toggle.setCheckable(True)
+        self._toggle.setChecked(not collapsed)
+        self._toggle.setFlat(True)
+        self._toggle.setStyleSheet(
+            "QPushButton { text-align: left; border: none; padding: 8px 0 2px 0; }"
+        )
+        font = self._toggle.font()
+        font.setBold(True)
+        font.setPointSize(max(font.pointSize() - 1, 1))
+        self._toggle.setFont(font)
+        self._toggle.toggled.connect(self._on_toggled)
+
+        self._content = QWidget()
+        self._content_layout = QVBoxLayout(self._content)
+        self._content_layout.setContentsMargins(0, 0, 0, 0)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+        layout.addWidget(self._toggle)
+        layout.addWidget(self._content)
+
+        self._on_toggled(self._toggle.isChecked())
+
+    def _on_toggled(self, expanded: bool) -> None:
+        arrow = "▾" if expanded else "▸"
+        self._toggle.setText(f"{arrow} {self._title}")
+        self._content.setVisible(expanded)
+
+    def add_widget(self, widget: QWidget) -> None:
+        self._content_layout.addWidget(widget)
+
+
 def _resolve_cmap(name: str):
     """Look up a colormap name from the user config against matplotlib's
     registry first, then the `colormaps` package. Returns None if the
@@ -147,9 +189,10 @@ class MainWindow(QMainWindow):
             sidebar_layout.addWidget(w)
         sidebar_layout.addWidget(_section_header("Dimensions"))
         sidebar_layout.addWidget(self.dim_panel)
-        sidebar_layout.addWidget(_section_header("Colors"))
+        colors_section = CollapsibleSection("Colors", collapsed=True)
         for w in color_widgets:
-            sidebar_layout.addWidget(w)
+            colors_section.add_widget(w)
+        sidebar_layout.addWidget(colors_section)
         sidebar_layout.addStretch(1)
 
         dock = QDockWidget("Controls", self)
