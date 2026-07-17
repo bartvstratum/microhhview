@@ -178,6 +178,10 @@ class MainWindow(QMainWindow):
         self.dim_panel.changed.connect(self._redraw)
 
         self.animate_controls = AnimateControls()
+        self.autoscale_checkbox.toggled.connect(self.animate_controls.set_autoscale)
+        self.animate_controls.set_autoscale(self.autoscale_checkbox.isChecked())
+        self.animate_controls.playingChanged.connect(self._on_animate_playing_changed)
+        self._animating = False
 
         sidebar = QWidget()
         sidebar_layout = QVBoxLayout(sidebar)
@@ -224,6 +228,13 @@ class MainWindow(QMainWindow):
     def _set_2d_controls_visible(self, visible: bool) -> None:
         for w in self._axis_widgets:
             w.setVisible(visible)
+
+    def _on_animate_playing_changed(self, playing: bool) -> None:
+        self._animating = playing
+        if playing:
+            self.plot_widget.begin_fast_updates()
+        else:
+            self.plot_widget.end_fast_updates()
 
     def _on_open_clicked(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Open dataset", "", FILE_FILTER)
@@ -391,17 +402,18 @@ class MainWindow(QMainWindow):
                 vmin = self._parse_float(self.vmin_edit.text())
                 vmax = self._parse_float(self.vmax_edit.text())
 
-            self.plot_widget.plot_pcolormesh(
-                x,
-                y,
-                data2d,
-                xlabel=dim_label(x_dim, self.backend.units(group, x_dim)),
-                ylabel=dim_label(y_dim, self.backend.units(group, y_dim)),
-                title=name,
-                cmap=self.cmap_combo.currentData(),
-                vmin=vmin,
-                vmax=vmax,
-            )
+            if not (self._animating and self.plot_widget.update_data_fast(data2d)):
+                self.plot_widget.plot_pcolormesh(
+                    x,
+                    y,
+                    data2d,
+                    xlabel=dim_label(x_dim, self.backend.units(group, x_dim)),
+                    ylabel=dim_label(y_dim, self.backend.units(group, y_dim)),
+                    title=name,
+                    cmap=self.cmap_combo.currentData(),
+                    vmin=vmin,
+                    vmax=vmax,
+                )
             self._current_2d = {
                 "x_dim": x_dim,
                 "y_dim": y_dim,

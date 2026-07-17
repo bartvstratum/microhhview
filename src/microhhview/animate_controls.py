@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSlider, QVBoxLayout, QWidget
 
 from .dim_controls import DimSlider
@@ -15,9 +15,12 @@ class AnimateControls(QWidget):
     to animate the "time" dimension. Disabled when there's no time slider
     to drive."""
 
+    playingChanged = Signal(bool)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._slider: DimSlider | None = None
+        self._autoscale = False
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._advance)
@@ -56,16 +59,41 @@ class AnimateControls(QWidget):
             self.stop()
         self._slider = slider
         self.setEnabled(slider is not None)
+        self._update_play_enabled()
+
+    def set_autoscale(self, enabled: bool) -> None:
+        """Playback and "auto scale (per frame)" don't mix: autoscaling
+        forces a full redraw (axes + colorbar) every frame, which is what
+        made animation slow in the first place. Block Play while it's on."""
+        self._autoscale = enabled
+        if enabled:
+            self.stop()
+        self._update_play_enabled()
+
+    def _update_play_enabled(self) -> None:
+        self.play_button.setEnabled(self._slider is not None and not self._autoscale)
+        self.play_button.setToolTip(
+            "Uncheck \"Auto scale (per frame)\" in Colors to animate" if self._autoscale else ""
+        )
 
     def stop(self) -> None:
-        self._timer.stop()
+        self._set_playing(False)
+
+    def _set_playing(self, playing: bool) -> None:
+        was_active = self._timer.isActive()
+        if playing:
+            self._timer.start(self._interval_ms())
+        else:
+            self._timer.stop()
+        if self._timer.isActive() != was_active:
+            self.playingChanged.emit(self._timer.isActive())
 
     def _on_play_clicked(self) -> None:
         if self._slider is not None:
-            self._timer.start(self._interval_ms())
+            self._set_playing(True)
 
     def _on_pause_clicked(self) -> None:
-        self._timer.stop()
+        self._set_playing(False)
 
     def _on_restart(self) -> None:
         if self._slider is not None:

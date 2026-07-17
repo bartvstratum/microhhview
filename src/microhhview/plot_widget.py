@@ -33,6 +33,7 @@ class PlotWidget(QWidget):
         self._pcolor_cmap: str | Colormap | None = None
         self._pcolor_x: np.ndarray | None = None
         self._pcolor_y: np.ndarray | None = None
+        self._blit_bg = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
@@ -53,11 +54,43 @@ class PlotWidget(QWidget):
         self._ax = None
         self._clickable = False
         self._mesh = None
+        self._blit_bg = None
         self.canvas.draw_idle()
+
+    def begin_fast_updates(self) -> None:
+        """Cache a blit background for update_data_fast(), used while
+        animating: a full canvas.draw() (rasterizing the mesh, colorbar,
+        axes, ticks) is the actual bottleneck for playback -- blitting just
+        the mesh onto a cached background is far cheaper. Only applies to
+        the current pcolormesh, if there is one."""
+        if self._mesh is not None and self._ax is not None:
+            self.canvas.draw()
+            self._blit_bg = self.canvas.copy_from_bbox(self._ax.bbox)
+        else:
+            self._blit_bg = None
+
+    def end_fast_updates(self) -> None:
+        self._blit_bg = None
+
+    def update_data_fast(self, data) -> bool:
+        """Blit new mesh data over the cached background. Returns False
+        (nothing drawn) if there's no cached background to blit onto, e.g.
+        because the current plot isn't a pcolormesh -- caller should fall
+        back to plot_pcolormesh() in that case."""
+        if self._blit_bg is None or self._mesh is None:
+            return False
+        self._mesh.set_array(data.ravel())
+        self.canvas.restore_region(self._blit_bg)
+        self._ax.draw_artist(self._mesh)
+        self.canvas.blit(self._ax.bbox)
+        if self._pcolor_x is not None and self._pcolor_y is not None:
+            self._ax.format_coord = self._make_format_coord(self._ax, self._pcolor_x, self._pcolor_y, data)
+        return True
 
     def plot_line(self, x, y, *, xlabel: str = "", ylabel: str = "", title: str = "") -> None:
         self.figure.clear()
         self._mesh = None
+        self._blit_bg = None
         ax = self.figure.add_subplot(111)
         ax.plot(x, y)
         ax.set_xlabel(xlabel)
@@ -112,6 +145,7 @@ class PlotWidget(QWidget):
             ax.set_title(title)
         else:
             self.figure.clear()
+            self._blit_bg = None
             ax = self.figure.add_subplot(111)
             mesh = ax.pcolormesh(x, y, data, cmap=cmap, shading="auto", vmin=vmin, vmax=vmax)
             mesh.set_mouseover(False)  # avoid a duplicate auto "[value]" line from the mesh itself
