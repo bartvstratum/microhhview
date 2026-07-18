@@ -3,7 +3,7 @@ from __future__ import annotations
 import matplotlib.dates as mdates
 import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
-from matplotlib.colors import Colormap
+from matplotlib.colors import Colormap, PowerNorm
 from matplotlib.figure import Figure
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QVBoxLayout, QWidget
@@ -31,6 +31,7 @@ class PlotWidget(QWidget):
         self._pcolor_xlabel: str | None = None
         self._pcolor_ylabel: str | None = None
         self._pcolor_cmap: str | Colormap | None = None
+        self._pcolor_gamma: float | None = None
         self._pcolor_layers: list[tuple[np.ndarray, np.ndarray]] = []
         self._pcolor_data: list[np.ndarray] = []
         self._blit_bg = None
@@ -118,11 +119,15 @@ class PlotWidget(QWidget):
         cmap: str | Colormap = "viridis",
         vmin: float | None = None,
         vmax: float | None = None,
+        gamma: float | None = None,
     ) -> None:
         """Draw one or more (x, y, data) layers on the same axes, in list
         order (first = bottom, last = top) -- a single-domain plot is just
         the one-layer case. Overlaid layers share one colormap/normalization
-        and one colorbar, since they represent the same variable."""
+        and one colorbar, since they represent the same variable. `gamma`,
+        if given, maps color through a PowerNorm instead of linearly --
+        useful for fields with a long tail (most of the range packed into a
+        few colors under a linear scale)."""
         layers = [(np.asarray(x), np.asarray(y), data) for x, y, data in layers]
 
         # Scrubbing a dimension slider keeps the same grid and only changes
@@ -135,6 +140,7 @@ class PlotWidget(QWidget):
             and self._pcolor_xlabel == xlabel
             and self._pcolor_ylabel == ylabel
             and self._pcolor_cmap == cmap
+            and self._pcolor_gamma == gamma
             and all(
                 px.shape == x.shape
                 and py.shape == y.shape
@@ -165,10 +171,16 @@ class PlotWidget(QWidget):
             self._blit_bg = None
             ax = self.figure.add_subplot(111)
             self._meshes = []
+            # One shared norm instance across all layers, so they stay on
+            # the same color scale (and so the colorbar reflects all of them).
+            norm = PowerNorm(gamma=gamma, vmin=shared_vmin, vmax=shared_vmax) if gamma else None
             for i, (x, y, data) in enumerate(layers):
-                mesh = ax.pcolormesh(
-                    x, y, data, cmap=cmap, shading="auto", vmin=shared_vmin, vmax=shared_vmax, zorder=i
-                )
+                if norm is not None:
+                    mesh = ax.pcolormesh(x, y, data, cmap=cmap, shading="auto", norm=norm, zorder=i)
+                else:
+                    mesh = ax.pcolormesh(
+                        x, y, data, cmap=cmap, shading="auto", vmin=shared_vmin, vmax=shared_vmax, zorder=i
+                    )
                 mesh.set_mouseover(False)  # avoid a duplicate auto "[value]" line from the mesh itself
                 self._meshes.append(mesh)
             ax.set_xlabel(xlabel)
@@ -179,6 +191,7 @@ class PlotWidget(QWidget):
             self._pcolor_xlabel = xlabel
             self._pcolor_ylabel = ylabel
             self._pcolor_cmap = cmap
+            self._pcolor_gamma = gamma
 
         self._pcolor_layers = [(x, y) for x, y, _ in layers]
         self._pcolor_data = [data for _, _, data in layers]

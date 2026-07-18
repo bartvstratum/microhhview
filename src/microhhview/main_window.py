@@ -165,6 +165,20 @@ class MainWindow(QMainWindow):
         self.global_range_button = QPushButton("Use global range")
         self.global_range_button.clicked.connect(self._on_global_range_clicked)
 
+        self.gamma_checkbox = QCheckBox("Power-law scale (γ)")
+        self.gamma_checkbox.toggled.connect(self._on_gamma_toggled)
+
+        self.gamma_edit = QLineEdit("0.5")
+        self.gamma_edit.setValidator(QDoubleValidator(0.01, 10.0, 4))
+        self.gamma_edit.setEnabled(False)
+        self.gamma_edit.editingFinished.connect(self._redraw)
+
+        gamma_container = QWidget()
+        gamma_layout = QHBoxLayout(gamma_container)
+        gamma_layout.setContentsMargins(0, 0, 0, 0)
+        gamma_layout.addWidget(self.gamma_checkbox)
+        gamma_layout.addWidget(self.gamma_edit)
+
         axes_widgets = [self.x_label, self.x_combo, self.y_label, self.y_combo]
         color_widgets = [
             self.cmap_label,
@@ -172,6 +186,7 @@ class MainWindow(QMainWindow):
             self.autoscale_checkbox,
             vrange_container,
             self.global_range_button,
+            gamma_container,
         ]
         self._axis_widgets = axes_widgets + color_widgets
 
@@ -348,6 +363,10 @@ class MainWindow(QMainWindow):
         self.autoscale_checkbox.setChecked(False)
         self._redraw()
 
+    def _on_gamma_toggled(self, checked: bool) -> None:
+        self.gamma_edit.setEnabled(checked)
+        self._redraw()
+
     def _fill_global_range(self) -> None:
         if not self.backends or self.current_group is None or self.current_var is None:
             return
@@ -436,6 +455,8 @@ class MainWindow(QMainWindow):
                 vmin = self._parse_float(self.vmin_edit.text())
                 vmax = self._parse_float(self.vmax_edit.text())
 
+            gamma = self._parse_float(self.gamma_edit.text()) if self.gamma_checkbox.isChecked() else None
+
             if not (self._animating and self.plot_widget.update_data_fast([d for _, _, d in layers])):
                 self.plot_widget.plot_pcolormesh(
                     layers,
@@ -445,6 +466,7 @@ class MainWindow(QMainWindow):
                     cmap=self.cmap_combo.currentData(),
                     vmin=vmin,
                     vmax=vmax,
+                    gamma=gamma,
                 )
             self._current_2d = {
                 "x_dim": x_dim,
