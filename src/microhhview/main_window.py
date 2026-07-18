@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from .animate_controls import AnimateControls
-from .axis_prefs import default_xy, dim_label
+from .axis_prefs import default_xy, dim_edges, dim_label, spatial_letter
 from .backends import Backend, open_dataset
 from .config import load_config
 from .cross_files import parse_cross_filename, resolve_domain_files
@@ -105,6 +105,7 @@ class MainWindow(QMainWindow):
         self.current_group: str | None = None
         self.current_var: str | None = None
         self._current_2d: dict | None = None
+        self._cross_plane: str | None = None
         self._popups: list[PointDialog] = []
 
         self._build_ui()
@@ -280,6 +281,8 @@ class MainWindow(QMainWindow):
         self.backends = backends
         self.current_group = None
         self.current_var = None
+        base_info = parse_cross_filename(resolved[0])
+        self._cross_plane = base_info.plane if base_info is not None else None
 
         if len(resolved) == 1:
             self.setWindowTitle(f"microhhview — {resolved[0].name}")
@@ -439,6 +442,7 @@ class MainWindow(QMainWindow):
 
             layers = []
             layer_states = []
+            raw_coords = []
             for b in self.backends:
                 raw_b = b.read(group, name, indexers)
                 data2d = np.transpose(raw_b, (result_dims.index(y_dim), result_dims.index(x_dim)))
@@ -448,6 +452,26 @@ class MainWindow(QMainWindow):
                 y = yc if yc is not None else np.arange(data2d.shape[0])
                 layers.append((x, y, data2d))
                 layer_states.append({"backend": b, "x_coord": x, "y_coord": y})
+                raw_coords.append((xc, yc))
+
+            # Domain-edge boxes: only for nested (non-base) domains, only
+            # when overlaying real coordinate-bearing domains -- domain 0's
+            # box would just coincide with the axes frame, and a single file
+            # has no nesting to show at all -- and only when the plotted
+            # axes are actually the cross-section's own plane (e.g. an
+            # xy-cross plotted as x vs y or x vs yh), not some other axis
+            # pairing the dim sliders happen to allow (e.g. z vs y).
+            edges = None
+            plane_dims = set(self._cross_plane) if self._cross_plane else None
+            if (
+                len(layers) > 1
+                and plane_dims is not None
+                and {spatial_letter(x_dim), spatial_letter(y_dim)} == plane_dims
+                and all(xc is not None and yc is not None for xc, yc in raw_coords)
+            ):
+                edges = [
+                    (*dim_edges(xc, x_dim), *dim_edges(yc, y_dim)) for xc, yc in raw_coords[1:]
+                ]
 
             if self.autoscale_checkbox.isChecked():
                 vmin = vmax = None
@@ -467,6 +491,7 @@ class MainWindow(QMainWindow):
                     vmin=vmin,
                     vmax=vmax,
                     gamma=gamma,
+                    edges=edges,
                 )
             self._current_2d = {
                 "x_dim": x_dim,

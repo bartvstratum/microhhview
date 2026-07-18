@@ -5,6 +5,7 @@ import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.colors import Colormap, PowerNorm
 from matplotlib.figure import Figure
+from matplotlib.patches import Rectangle
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
@@ -120,6 +121,7 @@ class PlotWidget(QWidget):
         vmin: float | None = None,
         vmax: float | None = None,
         gamma: float | None = None,
+        edges: list[tuple[float, float, float, float]] | None = None,
     ) -> None:
         """Draw one or more (x, y, data) layers on the same axes, in list
         order (first = bottom, last = top) -- a single-domain plot is just
@@ -127,7 +129,11 @@ class PlotWidget(QWidget):
         and one colorbar, since they represent the same variable. `gamma`,
         if given, maps color through a PowerNorm instead of linearly --
         useful for fields with a long tail (most of the range packed into a
-        few colors under a linear scale)."""
+        few colors under a linear scale). `edges`, if given (one per layer,
+        overlay only), draws each domain's (x_lo, x_hi, y_lo, y_hi) footprint
+        as a dashed rectangle -- there's no domain-boundary metadata in the
+        files themselves, so the caller derives this from each domain's own
+        coordinates."""
         layers = [(np.asarray(x), np.asarray(y), data) for x, y, data in layers]
 
         # Scrubbing a dimension slider keeps the same grid and only changes
@@ -183,6 +189,20 @@ class PlotWidget(QWidget):
                     )
                 mesh.set_mouseover(False)  # avoid a duplicate auto "[value]" line from the mesh itself
                 self._meshes.append(mesh)
+            if edges:
+                for x_lo, x_hi, y_lo, y_hi in edges:
+                    ax.add_patch(
+                        Rectangle(
+                            (x_lo, y_lo),
+                            x_hi - x_lo,
+                            y_hi - y_lo,
+                            fill=False,
+                            edgecolor="black",
+                            linestyle="--",
+                            linewidth=0.6,
+                            zorder=len(layers) + 1,
+                        )
+                    )
             ax.set_xlabel(xlabel)
             ax.set_ylabel(ylabel)
             ax.set_title(title)
