@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Wageningen University & Research
+# SPDX-FileContributor: Bart van Stratum
+# SPDX-License-Identifier: Apache-2.0
+
 from __future__ import annotations
 
 import numpy as np
