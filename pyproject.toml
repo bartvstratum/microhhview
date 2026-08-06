@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,13 +8,13 @@ version = "0.1.0"
 description = "Quick NetCDF/HDF5 variable viewer (line plots and pcolormesh) built on PySide6 + xarray + matplotlib"
 readme = "README.md"
 authors = [{ name = "Bart van Stratum", email = "bart@vanstratum.com" }]
-license = { file = "LICENSE" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Atmospheric Science",
-    "License :: OSI Approved :: Apache Software License",
 ]
 dependencies = [
     "PySide6>=6.5",
