@@ -7,7 +7,7 @@ from matplotlib.colors import Colormap, PowerNorm
 from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QVBoxLayout, QWidget
 
 
 def nearest_index(coord, value: float) -> int:
@@ -37,6 +37,15 @@ class PlotWidget(QWidget):
         self._pcolor_data: list[np.ndarray] = []
         self._blit_bg = None
 
+        # Clicking to inspect a point uses the same mouse button as the
+        # toolbar's zoom/pan rubber-band drag, so make it an explicit toggle
+        # rather than always-on -- otherwise every zoom click also pops open
+        # a point dialog.
+        self.inspect_checkbox = QCheckBox("Inspect")
+        self.inspect_checkbox.setToolTip("Click on the plot to show a profile/time series at that point")
+        self.toolbar.addSeparator()
+        self.toolbar.addWidget(self.inspect_checkbox)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
         layout.addWidget(self.toolbar)
@@ -45,7 +54,7 @@ class PlotWidget(QWidget):
         self.canvas.mpl_connect("button_press_event", self._on_click)
 
     def _on_click(self, event) -> None:
-        if not self._clickable or event.inaxes is not self._ax:
+        if not self._clickable or not self.inspect_checkbox.isChecked() or event.inaxes is not self._ax:
             return
         if event.xdata is None or event.ydata is None:
             return
