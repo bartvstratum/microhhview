@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "microhhview"
-version = "0.1.0"
-description = "Quick NetCDF/HDF5 variable viewer (line plots and pcolormesh) built on PySide6 + xarray + matplotlib"
+version = "0.1.1"
+description = "Quick NetCDF/HDF5/Zarr variable viewer (line plots and pcolormesh) built on PySide6 + xarray + matplotlib"
 readme = "README.md"
 authors = [{ name = "Bart van Stratum", email = "bart@vanstratum.com" }]
 license = "Apache-2.0"
@@ -22,6 +22,7 @@ dependencies = [
     "netCDF4>=1.6",
     "h5netcdf>=1.1",
     "h5py>=3.8",
+    "zarr>=2.16",
     "matplotlib>=3.7",
     "numpy>=1.24",
     "colormaps>=0.5",

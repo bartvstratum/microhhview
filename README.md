@@ -1,6 +1,6 @@
 # microhhview
 
-A NetCDF/HDF5 viewer focused on [MicroHH](https://github.com/microhh/microhh) LES output — not a general-purpose NetCDF/HDF5 viewer.
+A NetCDF/HDF5/Zarr viewer focused on [MicroHH](https://github.com/microhh/microhh) LES output — not a general-purpose NetCDF/HDF5/Zarr viewer.
 
 ## Install
 

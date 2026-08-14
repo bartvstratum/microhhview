@@ -35,7 +35,7 @@ from .dim_controls import DimControlsPanel
 from .plot_widget import PlotWidget, nearest_index
 from .point_dialog import PointDialog
 
-FILE_FILTER = "NetCDF/HDF5 files (*.nc *.nc4 *.cdf *.h5 *.hdf5);;All files (*)"
+FILE_FILTER = "NetCDF/HDF5/Zarr files (*.nc *.nc4 *.cdf *.h5 *.hdf5 *.zarr);;All files (*)"
 
 
 def _section_header(text: str) -> QLabel:
@@ -258,9 +258,18 @@ class MainWindow(QMainWindow):
             self.plot_widget.end_fast_updates()
 
     def _on_open_clicked(self) -> None:
-        paths, _ = QFileDialog.getOpenFileNames(self, "Open dataset", "", FILE_FILTER)
-        if paths:
-            self.open_files(paths)
+        # Zarr stores are directories, not files: the native file dialog
+        # can only navigate into them, not select them. Qt's own (non-native)
+        # dialog lets a directory be selected (single click) rather than
+        # entered (double click), so it can pick both regular files and
+        # *.zarr directories in one go.
+        dialog = QFileDialog(self, "Open dataset", "", FILE_FILTER)
+        dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
+        dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+        if dialog.exec() == QFileDialog.DialogCode.Accepted:
+            paths = dialog.selectedFiles()
+            if paths:
+                self.open_files(paths)
 
     def open_files(self, paths: list[str]) -> None:
         resolved = [Path(p) for p in paths]
